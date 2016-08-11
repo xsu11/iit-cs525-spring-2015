@@ -11,8 +11,6 @@ Cooperated with:
 	Jie Zhou <jzhou49@hawk.iit.edu>,
 	Xiaolang Wang <xwang122@hawk.iit.edu>
 
-The project is to accomplish assignments of this course. All rights reserved.
-
 Assignment 1 Schedule:
 	02/10/2015 - DEV Phase complete: Code and Unit Test
 	02/15/2015 - SIT Phase complete: System Integration Test
