@@ -1,0 +1,514 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xml:lang="en" xmlns="http://www.w3.org/1999/xhtml" lang="en-us"><head>
+   <meta content="text/html; charset=UTF-8" http-equiv="content-type">
+   <title>CS 525 - assign3</title>
+   <meta name="author" content="Boris Glavic">
+
+   <link href="files/site.css" rel="stylesheet" media="screen, projection" type="text/css">
+<link rel="stylesheet" href="http://yandex.st/highlightjs/7.3/styles/default.min.css">
+<script src="http://yandex.st/highlightjs/7.3/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+
+<!-- ************************************************************ -->
+<!-- ************* Menu ***************************************** -->
+<!-- ************************************************************ -->
+</head>
+<body id="home">
+  <div class="header">
+    <h1><strong>CS 525</strong>: Advanced Database Organization - <it>Spring 2014</it></h1>
+    <div class="iitlink">
+      <a href="http://www.iit.edu/csl" target="_blank">
+      <img src="./files/iit_logo_white.png" border="0" style="border:none;max-width:100%"  height="60px" alt="IIT logo" />
+      </a>
+    </div>
+    <div class="unilinks">
+      <ul>
+	<li>
+	<a href="http://www.iit.edu/csl/cs" target="_blank"><img src="./files/CS_600w.jpg" border="0" style="border:none;max-width:100%" height="60px" alt="CS logo" /></a>
+	</li>
+	<li>
+	<a href="http://www.iit.edu/csl" target="_blank"><img src="./files/CSL_logo_white.png" border="0" style="border:none;max-width:100%"  height="60px" alt="CSL logo" /></a>
+	</li>
+      </ul>
+    </div>
+    <ol id="navbar">
+      <li id="nav_home"><a href="http://cs.iit.edu/%7ecs525/index.html">Home</a></li>
+      <li id="nav_lectures"><a href="http://cs.iit.edu/%7ecs525/info.html">Course Info</a></li>
+      <li id="nav_schedule"><a href="http://cs.iit.edu/%7ecs525/schedule.html">Schedule</a></li>
+      <li id="nav_assignments"><a href="http://cs.iit.edu/%7ecs525/assignments.html">Programming Assignments</a></li>
+      <li id="nav_quiz"><a href="http://cs.iit.edu/%7ecs525/quiz.html">Quizzes</a></li>
+      <li id="nav_final"><a href="http://cs.iit.edu/%7ecs525/final.html">Exams</a></li>
+      <li id="nav_resources"><a href="http://cs.iit.edu/%7ecs525/resources.html">Resources</a></li>
+    </ol>
+  </div>
+
+  <!-- ************************************************************ -->  
+<!-- ************* Content ************************************** -->
+<!-- ************************************************************ -->  
+  <div id="content">
+<h2>Assignment 3 - Record Manager</h2>
+
+<p>In this assignment you are creating a record manager. The record manager handles tables with a fixed schema. Clients can insert records, delete records, update records, and scan through the records in a table. A scan is associated with a search condition and only returns records that match the search condition. Each table should be stored in a separate page file and your record manager should access the pages of the file through the buffer manager implemented in the last assignment.</p>
+
+<p><strong>Hints</strong>: This assignment is much more complex than the previous assignments and it is easy to get stuck if you are unclear about how to structure your solution and what data structures to use. Sit down with a piece of paper first and  design the data structures and architecture for your implementation.</p>
+
+<ul>
+        <li><strong>Record Representation</strong>: The data types we consider for this assignment are all fixed length. Thus, for a given schema, the size of a record is fixed too.</li>
+	<li><strong>Page Layout</strong>: You will have to define how to layout records on pages. Also you need to reserve some space on each page for managing the entries on the page. Refresh your memory on the page layouts discussed in class! For example, how would you represent slots for records on pages and manage free space.</li>
+	<li><strong>Table information pages</strong>: You probably will have to reserve one or more pages of a page file to store, e.g., the schema of the table.</li>
+	<li><strong>Record IDs</strong>: The assignment requires you to use record IDs that are a combination of page and slot number.</li>
+	<li><strong>Free Space Management</strong>: Since your record manager has to support deleting records you need to track available free space on pages. An easy solution is to link pages with free space by reserving space for a pointer to the next free space on each page. One of the table information pages can then have a pointer to the first page with free space. One alternative is to use several pages to store a directory recording how much free space you have for each page.</li>
+</ul>
+
+<!-- ************************************************************ -->
+<h3>tables.h</h3>
+
+<p>This header defines basic data structures for schemas, tables, records, record ids (RIDs), and values. Furthermore, this header defines functions for serializing these data structures as strings. The serialization functions are provided (<tt>rm_serializer.c</tt>). There are four datatypes that can be used for records of a table: integer (<tt>DT_INT</tt>), float (<tt>DT_FLOAT</tt>), strings of a fixed length (<tt>DT_STRING</tt>), and boolean (<tt>DT_BOOL</tt>). All records in a table conform to a common schema defined for this table. A record is simply a record id (<tt>rid</tt> consisting of a page number and slot number) and the concatenation of the binary representation of its attributes according to the schema (<tt>data</tt>).</p>
+
+<h4>Schema</h4>
+
+<p>
+A schema consists of a number of attributes (<tt>numAttr</tt>). For each attribute we record the name (<tt>attrNames</tt>) and data type (<tt>dataTypes</tt>). For attributes of type <tt>DT_STRING</tt> we record the size of the strings in <tt>typeLength</tt>. Furthermore, a schema can have a key defined. The key is represented as an array of integers that are the positions of the attributes of the key (<tt>keyAttrs</tt>). For example, consider a relation <tt>R(a,b,c)</tt> where <tt>a</tt> then keyAttrs would be <tt>[0]</tt>.
+</p>
+
+<h4>Data Types and Binary Representation</h4>
+
+<p>
+Values of a data type are represented using the <tt>Value</tt> struct. The value struct represents the values of a data type using standard C data types. For example, a string is a <tt>char *</tt> and an integer using a C <tt>int</tt>. Note that values are only used for expressions and for returning data to the client of the record manager. Attribute values in records are stored slightly different if the data type is string. Recall that in C a string is an array of characters ended by a <tt>0</tt> byte. In a record, strings are stored without the additional <tt>0</tt> byte in the end. For example, for strings of length 4 should occupy 4 bytes in the <tt>data</tt> field of the record.
+</p>
+
+<h4>Interface</h4>
+
+<pre><code>#ifndef TABLES_H
+#define TABLES_H
+
+#include "dt.h"
+
+// Data Types, Records, and Schemas
+typedef enum DataType {
+  DT_INT = 0,
+  DT_STRING = 1,
+  DT_FLOAT = 2,
+  DT_BOOL = 3
+} DataType;
+
+typedef struct Value {
+  DataType dt;
+  union v {
+    int intV;
+    char *stringV;
+    float floatV;
+    bool boolV;
+  } v;
+} Value;
+
+typedef struct RID {
+  int page;
+  int slot;
+} RID;
+
+typedef struct Record
+{
+  RID id;
+  char *data;
+} Record;
+
+// information of a table schema: its attributes, datatypes, 
+typedef struct Schema
+{
+  int numAttr;
+  char **attrNames;
+  DataType *dataTypes;
+  int *typeLength;
+  int *keyAttrs;
+  int keySize;
+} Schema;
+
+// TableData: Management Structure for a Record Manager to handle one relation
+typedef struct RM_TableData
+{
+  char *name;
+  Schema *schema;
+  void *mgmtData;
+} RM_TableData;
+
+#define MAKE_STRING_VALUE(result, value)				\
+  do {									\
+    (result) = (Value *) malloc(sizeof(Value));				\
+    (result)->dt = DT_STRING;						\
+    (result)->v.stringV = (char *) malloc(strlen(value) + 1);		\
+    strcpy((result)->v.stringV, value);					\
+  } while(0)
+
+
+#define MAKE_VALUE(result, datatype, value)				\
+  do {									\
+    (result) = (Value *) malloc(sizeof(Value));				\
+    (result)->dt = datatype;						\
+    switch(datatype)							\
+      {									\
+      case DT_INT:							\
+	(result)->v.intV = value;					\
+	break;								\
+      case DT_FLOAT:							\
+	(result)->v.floatV = value;					\
+	break;								\
+      case DT_BOOL:							\
+	(result)->v.boolV = value;					\
+	break;								\
+      }									\
+  } while(0)
+
+
+// debug and read methods
+extern Value *stringToValue (char *value);
+extern char *serializeTableInfo(RM_TableData *rel);
+extern char *serializeTableContent(RM_TableData *rel);
+extern char *serializeSchema(Schema *schema);
+extern char *serializeRecord(Record *record, Schema *schema);
+extern char *serializeAttr(Record *record, Schema *schema, int attrNum);
+extern char *serializeValue(Value *val);
+
+#endif
+</code></pre>
+
+<!-- ************************************************************ -->
+<h3>expr.h</h3>
+
+<p>This header defines data structures and functions to deal with expressions for scans. These functions are implemented in <tt>expr.c</tt>. Expressions can either be constants (stored as a <tt>Value</tt> struct), references to attribute values (represented as the position of an attribute in the schema), and operator invocations. Operators are either comparison operators (equals and smaller) that are defined for all data types and boolean operators <tt>AND</tt>, <tt>OR</tt>, and <tt>NOT</tt>. Operators have one or more expressions as input. The expression framework allows for arbitrary nesting of operators as long as their input types are correct. For example, you cannot use an integer constant as an input to a boolean AND operator. As explained below, one of the parameters of the scan operation of the record manager is an expression representing the scan condition.</p>
+
+<!-- ************************************************************ -->
+<h4>Interface</h4>
+
+<pre><code>#ifndef EXPR_H
+#define EXPR_H
+
+#include "dberror.h"
+#include "tables.h"
+
+// datatype for arguments of expressions used in conditions
+typedef enum ExprType {
+  EXPR_OP,
+  EXPR_CONST,
+  EXPR_ATTRREF
+} ExprType;
+
+typedef struct Expr {
+  ExprType type;
+  union expr {
+    Value *cons;
+    int attrRef;
+    struct Operator *op;
+  } expr;
+} Expr;
+
+// comparison operators
+typedef enum OpType {
+  OP_BOOL_AND,
+  OP_BOOL_OR,
+  OP_BOOL_NOT,
+  OP_COMP_EQUAL,
+  OP_COMP_SMALLER
+} OpType;
+
+typedef struct Operator {
+  OpType type;
+  Expr **args;
+} Operator;
+
+// expression evaluation methods
+extern RC valueEquals (Value *left, Value *right, Value *result);
+extern RC valueSmaller (Value *left, Value *right, Value *result);
+extern RC boolNot (Value *input, Value *result);
+extern RC boolAnd (Value *left, Value *right, Value *result);
+extern RC boolOr (Value *left, Value *right, Value *result);
+extern RC evalExpr (Record *record, Schema *schema, Expr *expr, Value **result);
+extern RC freeExpr (Expr *expr);
+extern void freeVal(Value *val);
+
+
+#define CPVAL(_result,_input)						\
+  do {									\
+    (_result)->dt = _input->dt;						\
+  switch(_input->dt)							\
+    {									\
+    case DT_INT:							\
+      (_result)->v.intV = _input->v.intV;					\
+      break;								\
+    case DT_STRING:							\
+      (_result)->v.stringV = (char *) malloc(strlen(_input->v.stringV));	\
+      strcpy((_result)->v.stringV, _input->v.stringV);			\
+      break;								\
+    case DT_FLOAT:							\
+      (_result)->v.floatV = _input->v.floatV;				\
+      break;								\
+    case DT_BOOL:							\
+      (_result)->v.boolV = _input->v.boolV;				\
+      break;								\
+    }									\
+} while(0)
+
+#define MAKE_BINOP_EXPR(_result,_left,_right,_optype)			\
+    do {								\
+      Operator *_op = (Operator *) malloc(sizeof(Operator));		\
+      _result = (Expr *) malloc(sizeof(Expr));				\
+      _result->type = EXPR_OP;						\
+      _result->expr.op = _op;						\
+      _op->type = _optype;						\
+      _op->args = (Expr **) malloc(2 * sizeof(Expr*));			\
+      _op->args[0] = _left;						\
+      _op->args[1] = _right;						\
+    } while (0)
+
+#define MAKE_UNOP_EXPR(_result,_input,_optype)				\
+  do {									\
+    Operator *_op = (Operator *) malloc(sizeof(Operator));		\
+    _result = (Expr *) malloc(sizeof(Expr));				\
+    _result->type = EXPR_OP;						\
+    _result->expr.op = _op;						\
+    _op->type = _optype;						\
+    _op->args = (Expr **) malloc(sizeof(Expr*));			\
+    _op->args[0] = _input;						\
+  } while (0)
+
+#define MAKE_ATTRREF(_result,_attr)					\
+  do {									\
+    _result = (Expr *) malloc(sizeof(Expr));				\
+    _result->type = EXPR_ATTRREF;					\
+    _result->expr.attrRef = _attr;					\
+  } while(0)
+
+#define MAKE_CONS(_result,_value)					\
+  do {									\
+    _result = (Expr *) malloc(sizeof(Expr));				\
+    _result->type = EXPR_CONST;						\
+    _result->expr.cons = _value;					\
+  } while(0)
+
+#endif // EXPR
+</code></pre>
+
+<!-- ************************************************************ -->
+<h3>record_mgr.h</h3>
+
+<p>We now discuss the interface of the record manager as defined in <tt>record_mgr.h</tt>. There are five types of functions in the record manager: functions for table and record manager management, functions for handling the records in a table, functions related to scans, functions for dealing with schemas, and function for dealing with attribute values and creating records. We now discuss each of these function types.</p>
+
+<!-- ************************************************************ -->
+<h4>Table and Record Manager Functions</h4>
+
+<p>Similar to previous assignments, there are functions to initialize and shutdown a record manager. Furthermore, there are functions to create, open, and close a table. Creating a table should create the underlying page file and store information about the schema, free-space, ... and so on in the Table Information pages. All operations on a table such as scanning or inserting records require the table to be opened first. Afterwards, clients can use the RM_TableData struct to interact with the table. Closing a table should cause all outstanding changes to the table to be written to the page file. The <tt>getNumTuples</tt> function returns the number of tuples in the table.</p>
+
+<!-- ************************************************************ -->
+<h4>Record Functions</h4>
+
+<p>These functions are used to retrieve a record with a certain <tt>RID</tt>, to delete a record with a certain <tt>RID</tt>, to insert a new record, and to update an existing record with new values. When a new record is inserted the record manager should assign an <tt>RID</tt> to this record and update the <tt>record</tt> parameter passed to <tt>insertRecord</tt>.</p>
+
+<!-- ************************************************************ -->
+<h4>Scan Functions</h4>
+
+<p>A client can initiate a scan to retrieve all tuples from a table that fulfill a certain condition (represented as an <tt>Expr</tt>). Starting a scan initializes the <tt>RM_ScanHandle</tt> data structure passed as an argument to <tt>startScan</tt>. Afterwards, calls to the <tt>next</tt> method should return the next tuple that fulfills the scan condition. If <tt>NULL</tt> is passed as a scan condition, then all tuples of the table should be returned. <tt>next</tt> should return <tt>RC_RM_NO_MORE_TUPLES</tt> once the scan is completed and <tt>RC_OK</tt> otherwise (unless an error occurs of course). Below is an example of how a client can use a scan.</p>
+
+<pre><code>
+  RM_TableData *rel = (RM_TableData *) malloc(sizeof(RM_TableData));
+  RM_ScanHandle *sc = (RM_ScanHandle *) malloc(sizeof(RM_ScanHandle));
+  Record *r = (Record *) malloc(sizeof(Record));
+  int rc;
+
+  openTable(rel, "R");
+
+  startScan(rel, sc, NULL);
+  
+  while((rc = next(sc, r)) == RC_OK) 
+    {
+    // do something with r
+    }
+    if (rc != RC_RM_NO_MORE_TUPLES)
+       // handle the error
+  closeScan(sc);
+</code></pre>
+
+<p>
+Closing a scan indicates to the record manager that all associated resources can be cleaned up.
+</p>
+
+<!-- ************************************************************ -->
+<h4>Schema Functions</h4>
+
+<p>
+These helper functions are used to return the size in bytes of records for a given schema and create a new schema.
+</p>
+
+<!-- ************************************************************ -->
+<h4>Attribute Functions</h4>
+
+<p>
+These functions are used to get or set the attribute values of a record and create a new record for a given schema. Creating a new record should allocate enough memory to the <tt>data</tt> field to hold the binary representations for all attributes of this record as determined by the schema.
+</p>
+
+<!-- ************************************************************ -->
+<h4>Interface</h4>
+
+<pre><code>#ifndef RECORD_MGR_H
+#define RECORD_MGR_H
+
+#include "dberror.h"
+#include "expr.h"
+#include "tables.h"
+
+// Bookkeeping for scans
+typedef struct RM_ScanHandle
+{
+  RM_TableData *rel;
+  void *mgmtData;
+} RM_ScanHandle;
+
+// table and manager
+extern RC initRecordManager (void *mgmtData);
+extern RC shutdownRecordManager ();
+extern RC createTable (char *name, Schema *schema);
+extern RC openTable (RM_TableData *rel, char *name);
+extern RC closeTable (RM_TableData *rel);
+extern RC deleteTable (char *name);
+extern int getNumTuples (RM_TableData *rel);
+
+// handling records in a table
+extern RC insertRecord (RM_TableData *rel, Record *record);
+extern RC deleteRecord (RM_TableData *rel, RID id);
+extern RC updateRecord (RM_TableData *rel, Record *record);
+extern RC getRecord (RM_TableData *rel, RID id, Record *record);
+
+// scans
+extern RC startScan (RM_TableData *rel, RM_ScanHandle *scan, Expr *cond);
+extern RC next (RM_ScanHandle *scan, Record *record);
+extern RC closeScan (RM_ScanHandle *scan);
+
+// dealing with schemas
+extern int getRecordSize (Schema *schema);
+extern Schema *createSchema (int numAttr, char **attrNames, DataType *dataTypes, int *typeLength, int keySize, int *keys);
+extern RC freeSchema (Schema *schema);
+
+// dealing with records and attribute values
+extern RC createRecord (Record **record, Schema *schema);
+extern RC freeRecord (Record *record);
+extern RC getAttr (Record *record, Schema *schema, int attrNum, Value **value);
+extern RC setAttr (Record *record, Schema *schema, int attrNum, Value *value);
+
+#endif // RECORD_MGR_H
+</code></pre>
+
+<!-- ************************************************************ -->
+<h3>Optional Extensions</h3>
+
+You can earn up to 20 bonus points for implementing optional extensions. A good implementation of one or two extensions will give you the maximum of 20 points. So rather then implementing 5 incomplete extensions, I suggest you to focus on one extension first and if there is enough time, then add additional ones.
+
+<ul>
+	<li><strong>TIDs and tombstones</strong>: Implement the TID and Tombstone concepts introduced in class. Even though your implementation does not need to move around records, because they are fixed size, TIDs and Tombstones are important for real systems.</li>
+	<li><strong>Null values</strong>: Add support for SQL style <tt>NULL</tt> values to the data types and expressions. This requires changes to the expression code, values, and binary record representation (e.g., you can use the NULL bitmaps introduced in class).</li>
+	<li><strong>Check primary key constraints</strong>: On inserting and updating tupes, check that the primary key constraint for the table holds. That is you need to check that no record with the same key attribute values as the new record already exists in the table.</li>
+	<li><strong>Ordered scans</strong>: Add an parameter to the scan that determines a sort order of results, i.e., you should pass a list of attributes to sort on. For dare-devils: Implement this using external sorting, so you can sort arbitrarily large data.</li>
+	<li><strong>Interactive interface</strong>: Implement a simple user interface. You should be able to define new tables, insert, update, and delete tuples, and execute scans. This can either be a shell or menu-based interface.</li>
+	<li><strong>Conditional updates using scans</strong>: Extend the scan code to support updates. Add a new method <tt>updateScan</tt> that takes a condition (expression) which is used to determine which tuples to update and a pointer to a function which takes a record as input and returns the updated version of the record. That is the user of the <tt>updateScan</tt> method should implement a method that updates the record values and then pass this function to <tt>updateScan</tt>. Alternatively, extend the expression model with new expression types (e.g., adding two integers) and let <tt>updateScan</tt> take a list of expressions as a parameter. In this case the new values of an updated tuple are produced by applying the expressions to the old values of the tuple. This would closer to real SQL updates.</li>
+</ul>
+
+
+<!-- ************************************************************ -->
+<h3>Source Code Structure</h3>
+
+You source code directories should be structured as follows. You should reuse your existing storage manager and buffer manager implementations. So before you start to develop, please copy your storage manager and buffer manager implementations.
+
+<ul>
+	<li>Put all source files in a folder <tt>assign3</tt> in your git repository</li>
+	<li>This folder should contain at least ...</li>
+	<ul>
+		<li>the provided header and C files</li>
+		<li>a make file for building your code <tt>Makefile</tt></li>
+		<li>a bunch of <tt>*.c</tt> and <tt>*.h</tt> files implementing the record manager</li>
+		<li><tt>README.txt</tt>: A text file that shortly describes your solution</li>
+	</ul>
+</ul>
+
+E.g., the structure may look like that:
+
+<pre><code>git
+	assign3
+		Makefile
+		buffer_mgr.h
+		buffer_mgr_stat.c
+		buffer_mgr_stat.h
+		dberror.c
+		dberror.h
+		expr.c
+		expr.h
+		record_mgr.h
+		rm_serializer.c
+		storage_mgr.h
+		tables.h
+		test_assign3_1.c
+		test_expr.c
+		test_helper.h
+</code></pre>
+
+<!-- ************************************************************ -->
+<h3>Test Cases</h3>
+
+<h4><tt>test_helper.h</tt></h4>
+
+<p>Defines several helper methods for implementing test cases such as <tt>ASSERT_TRUE</tt>.</p>
+
+<h4><tt>test_expr.c</tt></h4>
+
+<p>This file implements several test cases using the <tt>expr.h</tt> interface. Please let your make file generate a <tt>test_expr</tt> binary for this code. You are encouraged to extend it with new test cases or use it as a template to develop your own test files.</p>
+
+<h4><tt>test_assign3_1.c</tt></h4>
+
+<p>This file implements several test cases using the <tt>record_mgr.h</tt> interface. Please let your make file generate a <tt>test_assign3</tt> binary for this code. You are encouraged to extend it with new test cases or use it as a template to develop your own test files.</p>
+
+
+ <script>
+
+var pres = document.getElementsByClassName('blockcode'), pre, code, lines, pl, cl;
+
+for (pl = pres.length, p = 0; p < pl; p++) {
+
+pre = pres[p];
+
+code = pre.children[0];
+
+code.innerHTML = code.innerHTML.split("\n").map(function(line) {
+
+return '<span class="line">' + line + '</span>';
+
+}).join("\n");
+
+lines = code.getElementsByClassName('line');
+
+for (cl = lines.length, l = 0; l < cl; l++) {
+
+lines[l].style.width = pre.scrollWidth + 'px';
+
+}
+
+}
+
+</script>
+  </div>
+<!-- ************************************************************ -->
+<!-- ************* Footer ************************************** -->
+<!-- ************************************************************ -->  
+  <div id="footer">
+   <p>
+     <a href="mailto:bglavic@iit.edu">bglavic@iit.edu</a>.<br>
+   </p> 
+  </div>
+  <script type="text/javascript">
+  var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+  document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+  </script><script src="syllabus_files/ga.js" type="text/javascript"></script>
+  <script type="text/javascript">
+  try {
+  var pageTracker = _gat._getTracker("UA-7056528-7");
+  pageTracker._trackPageview();
+  } catch(err) {}</script>
+
+
+</body></html>

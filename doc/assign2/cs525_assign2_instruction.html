@@ -1,0 +1,323 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xml:lang="en" xmlns="http://www.w3.org/1999/xhtml" lang="en-us"><head>
+   <meta content="text/html; charset=UTF-8" http-equiv="content-type">
+   <title>CS 525 - assign2</title>
+   <meta name="author" content="Boris Glavic">
+
+   <link href="files/site.css" rel="stylesheet" media="screen, projection" type="text/css">
+<link rel="stylesheet" href="http://yandex.st/highlightjs/7.3/styles/default.min.css">
+<script src="http://yandex.st/highlightjs/7.3/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+
+<!-- ************************************************************ -->
+<!-- ************* Menu ***************************************** -->
+<!-- ************************************************************ -->
+</head>
+<body id="home">
+  <div class="header">
+    <h1><strong>CS 525</strong>: Advanced Database Organization - <it>Spring 2014</it></h1>
+    <div class="iitlink">
+      <a href="http://www.iit.edu/csl" target="_blank">
+      <img src="./files/iit_logo_white.png" border="0" style="border:none;max-width:100%"  height="60px" alt="IIT logo" />
+      </a>
+    </div>
+    <div class="unilinks">
+      <ul>
+	<li>
+	<a href="http://www.iit.edu/csl/cs" target="_blank"><img src="./files/CS_600w.jpg" border="0" style="border:none;max-width:100%" height="60px" alt="CS logo" /></a>
+	</li>
+	<li>
+	<a href="http://www.iit.edu/csl" target="_blank"><img src="./files/CSL_logo_white.png" border="0" style="border:none;max-width:100%"  height="60px" alt="CSL logo" /></a>
+	</li>
+      </ul>
+    </div>
+    <ol id="navbar">
+      <li id="nav_home"><a href="http://cs.iit.edu/%7ecs525/index.html">Home</a></li>
+      <li id="nav_lectures"><a href="http://cs.iit.edu/%7ecs525/info.html">Course Info</a></li>
+      <li id="nav_schedule"><a href="http://cs.iit.edu/%7ecs525/schedule.html">Schedule</a></li>
+      <li id="nav_assignments"><a href="http://cs.iit.edu/%7ecs525/assignments.html">Programming Assignments</a></li>
+      <li id="nav_quiz"><a href="http://cs.iit.edu/%7ecs525/quiz.html">Quizzes</a></li>
+      <li id="nav_final"><a href="http://cs.iit.edu/%7ecs525/final.html">Exams</a></li>
+      <li id="nav_resources"><a href="http://cs.iit.edu/%7ecs525/resources.html">Resources</a></li>
+    </ol>
+  </div>
+
+  <!-- ************************************************************ -->  
+<!-- ************* Content ************************************** -->
+<!-- ************************************************************ -->  
+  <div id="content">
+<h2>Assignment 2 - Buffer Manager</h2>
+
+<p>You should implement a buffer manager in this assignment. The buffer manager manages a fixed number of pages in memory that represent pages from a page file managed by the storage manager implemented in assignment 1. The memory pages managed by the buffer manager are called <em>page frames</em> or <em>frames</em> for short. We call the combination of a page file and the page frames storing pages from that file a <tt>Buffer Pool</tt>. The Buffer manager should be able to handle more than one open buffer pool at the same time. However, there can only be one buffer pool for each page file.  Each buffer pool uses one page replacement strategy that is determined when the buffer pool is initialized. You should at least implement two replacement strategies <tt>FIFO</tt> and <tt>LRU</tt>. Your solution should implement all the methods defined in the <tt>buffer_mgr.h</tt> header explained below.</p>
+
+<p>Make use of existing debugging and memory checking tools. At some point you will have to debug an error. See the main <a href="http://cs.iit.edu/%7ecs525/assignments.html">assignment page</a> for information about debugging. Memory leaks are errors!</p>
+
+<!-- ************************************************************ -->
+<h3 id="overview">Buffer Pool Functionality and Concepts</h3>
+
+<p>A buffer pool consists of a fixed amount of page frames (pages in memory) that are used to store disk pages from a page file in memory. Clients of the buffer manager can request pages identified by their position in the page file (<em>page number</em>) to be loaded in a page frame. This is called <em>pinning</em> a page. Internally, the buffer manager has to check whether the page requested by the client is already cached in a page frame. If this is the case, then the buffer simply returns a pointer to this page frame to the client. Otherwise, the buffer manager has to read this page from disk and decide in which page frame it should be stored (this is what the replacement strategy is for). Once an appropriate frame is found and the page has been loaded, the buffer manager returns a pointer to this frame to the client. The client can then start to read and/or modify that page. Once the client is done with reading or writing a page, he needs to inform the buffer manager that he no longer needs that page. This is called <em>unpinning</em>. Furthermore, the buffer manager needs to know whether the page was modified by the client. This is realized by requiring the client to call a function to tell the buffer manager that the page is <em>dirty</em>. The buffer needs this information for replacing pages in the buffer pool. If a dirty page is evicted from the buffer pool, then the buffer manager needs to write the content of this page back to disk. Otherwise, the modifications done by the client would be lost. 
+Since buffer pools are used concurrently by several components of a DBMS, the same page can be pinned by more than one client. <strong>Making the functions of the buffer manager thread-safe is not part of the assignment</strong>. The number of clients having pinned a page is called the <em>fix count</em> of that page. The buffer manager can only evict pages with <em>fix count</em> 0 from the pool, because a non-zero fix count indicates that at least one client is still using the page. Pinning a page increases its fix count by 1, unpinning the page reduces its fix count.</p>
+
+<p>Some hints and reminders:</p>
+
+<ul>
+<li>Independent of the page replacement strategy, the buffer manager is only allowed to evict pages with fix count zero. This has to be taken into account when implementing page replacement strategies.</li>
+<li>Dirty pages can be evicted from the pool if they have a fix count 0, but have to be written back to disk before the eviction</li>
+<li>If a dirty page is written back to disk and has fix count 0, then it is no longer considered dirty.</li>
+<li>You buffer manager needs to maintain a mapping between page numbers and page frames to enable fast look-ups from page number to page frame and vice versa.</li>
+</ul>
+
+<!-- ************************************************************ -->
+<h3>Optional Extensions</h3>
+
+<p>Realize these optional extensions for extra credit and extra fun. ;-)</p>
+
+<ul>
+	<li>Make the buffer pool functions thread safe. This extension would result in your buffer manager being closer to real life buffer manager implementations.</li>
+	<li>Implement additional page replacement strategies such as CLOCK or LRU-k.</li>
+</ul>
+
+<!-- ************************************************************ -->
+<h3 id="interface">Interface</h3>
+
+<p>The header for the buffer manager interface is shown below. Your solution should implement all functions defined in this header.</p>
+
+<h4>Data Structures</h4>
+
+<p>The header defines two important data structures. The <tt>BM_BufferPool</tt> and the <tt>BM_PageHandle</tt>.</p>
+
+<p>The <tt>BM_BufferPool</tt> stores information about a buffer pool: the name of the page file associated with the buffer pool (<tt>pageFile</tt>), the size of the buffer pool, i.e., the number of page frames (<tt>numPages</tt>), the page replacement strategy (<tt>strategy</tt>), and a pointer to bookkeeping data (<tt>mgmtData</tt>). Similar to the first assignment, you can use the <tt>mgmtData</tt> to store any necessary information about a buffer pool that you need to implement the interface. For example, this could include a pointer to the area in memory that stores the page frames or data structures needed by the page replacement strategy to make replacement decisions.</p>
+
+<pre class="blockcode"><code class="c++">typedef struct BM_BufferPool {
+  char *pageFile;
+  int numPages;
+  ReplacementStrategy strategy;
+  void *mgmtData;
+} BM_BufferPool;</code></pre>
+
+<p>The <tt>BM_PageHandle</tt> stores information about a page. The page number (position of the page in the page file) is stored in <tt>pageNum</tt>. The page number of the first data page in a page file is 0. The <tt>data</tt> field points to the area in memory storing the content of the page. This will usually be a page frame from your buffer pool.</p> 
+
+<pre class="blockcode"><code class="c++">typedef struct BM_PageHandle {
+  PageNumber pageNum;
+  char *data;
+} BM_PageHandle;</code></pre>
+
+<!-- ************************************************************ -->
+<h4>Buffer Pool Functions</h4>
+
+<p>These functions are used to create a buffer pool for an existing page file (<tt>initBufferPool</tt>), shutdown a buffer pool and free up all associated resources (<tt>shutdownBufferPool</tt>), and to force the buffer manager to write all dirty pages to disk (<tt>forceFlushPool</tt>).</p>
+
+<p><tt>initBufferPool</tt> creates a new buffer pool with <tt>numPages</tt> page frames using the page replacement strategy <tt>strategy</tt>. The pool is used to cache pages from the page file with name <tt>pageFileName</tt>. Initially, all page frames should be empty. The page file should already exist, i.e., this method should not generate a new page file. <tt>stratData</tt> can be used to pass parameters for the page replacement strategy. For example, for <em>LRU-k</em> this could be the parameter <tt>k</tt>.</p>
+
+<p><tt>shutdownBufferPool</tt> destroys a buffer pool. This method should free up all resources associated with buffer pool. For example, it should free the memory allocated for page frames. If the buffer pool contains any dirty pages, then these pages should be written back to disk before destroying the pool. It is an error to shutdown a buffer pool that has pinned pages.</p>
+
+<p><tt>forceFlushPool</tt> causes all dirty pages (with fix count 0) from the buffer pool to be written to disk.</p>
+
+<!-- ************************************************************ -->
+<h4>Page Management Functions</h4>
+
+<p>These functions are used pin pages, unpin pages, mark pages as dirty, and force a page back to disk.</p>
+
+<p><tt>pinPage</tt> pins the page with page number <tt>pageNum</tt>. The buffer manager is responsible to set the <tt>pageNum</tt> field of the page handle passed to the method. Similarly, the <tt>data</tt> field should point to the page frame the page is stored in (the area in memory storing the content of the page).</p>
+
+<p><tt>unpinPage</tt> unpins the page <tt>page</tt>. The <tt>pageNum</tt> field of <tt>page</tt> should be used to figure out which page to unpin.</p>
+
+<p><tt>markDirty</tt> marks a page as dirty.</p>
+
+<p><tt>forcePage</tt> should write the current content of the page back to the page file on disk.</p>
+
+<!-- ************************************************************ -->
+<h4>Statistics Functions</h4>
+
+<p>These functions return statistics about a buffer pool and its contents. The print debug functions explained below internally use these functions to gather information about a pool.</p> 
+
+<p>The <tt>getFrameContents</tt> function returns an array of PageNumbers (of size <tt>numPages</tt>) where the ith element is the number of the page stored in the ith page frame. An empty page frame is represented using the constant <tt>NO_PAGE</tt>. </p>
+
+<p>The <tt>getDirtyFlags</tt> function returns an array of bools (of size <tt>numPages</tt>) where the ith element is <tt>TRUE</tt> if the page stored in the ith page frame is dirty. Empty page frames are considered as clean.</p>
+
+<p>The <tt>getFixCounts</tt> function returns an array of ints (of size <tt>numPages</tt>) where the ith element is the fix count of the page stored in the ith page frame. Return 0 for empty page frames.</p>
+
+<p>The <tt>getNumReadIO</tt> function returns the number of pages that have been read from disk since a buffer pool has been initialized. You code is responsible to initializing this statistic at pool creating time and update whenever a page is read from the page file into a page frame.</p>
+
+<p><tt>getNumWriteIO</tt> returns the number of pages written to the page file since the buffer pool has been initialized.</p>
+
+<!-- ************************************************************ -->
+<h4><tt>buffer_mgr.h</tt></h4>
+<pre class="blockcode"><code class="c++">#ifndef BUFFER_MANAGER_H
+#define BUFFER_MANAGER_H
+
+// Include return codes and methods for logging errors
+#include "dberror.h"
+
+// Include bool DT
+#include "dt.h"
+
+// Replacement Strategies
+typedef enum ReplacementStrategy {
+  RS_FIFO = 0,
+  RS_LRU = 1,
+  RS_CLOCK = 2,
+  RS_LFU = 3,
+  RS_LRU_K = 4
+} ReplacementStrategy;
+
+// Data Types and Structures
+typedef int PageNumber;
+#define NO_PAGE -1
+
+typedef struct BM_BufferPool {
+  char *pageFile;
+  int numPages;
+  ReplacementStrategy strategy;
+  void *mgmtData; // use this one to store the bookkeeping info your buffer 
+                  // manager needs for a buffer pool
+} BM_BufferPool;
+
+typedef struct BM_PageHandle {
+  PageNumber pageNum;
+  char *data;
+} BM_PageHandle;
+
+// convenience macros
+#define MAKE_POOL()					\
+  ((BM_BufferPool *) malloc (sizeof(BM_BufferPool)))
+
+#define MAKE_PAGE_HANDLE()				\
+  ((BM_PageHandle *) malloc (sizeof(BM_PageHandle)))
+
+// Buffer Manager Interface Pool Handling
+RC initBufferPool(BM_BufferPool *const bm, const char *const pageFileName, 
+		  const int numPages, ReplacementStrategy strategy, 
+		  void *stratData);
+RC shutdownBufferPool(BM_BufferPool *const bm);
+RC forceFlushPool(BM_BufferPool *const bm);
+
+// Buffer Manager Interface Access Pages
+RC markDirty (BM_BufferPool *const bm, BM_PageHandle *const page);
+RC unpinPage (BM_BufferPool *const bm, BM_PageHandle *const page);
+RC forcePage (BM_BufferPool *const bm, BM_PageHandle *const page);
+RC pinPage (BM_BufferPool *const bm, BM_PageHandle *const page, 
+	    const PageNumber pageNum);
+
+// Statistics Interface
+PageNumber *getFrameContents (BM_BufferPool *const bm);
+bool *getDirtyFlags (BM_BufferPool *const bm);
+int *getFixCounts (BM_BufferPool *const bm);
+int getNumReadIO (BM_BufferPool *const bm);
+int getNumWriteIO (BM_BufferPool *const bm);
+
+#endif
+</code></pre>
+
+<!-- ************************************************************ -->
+<h3 id="stats">Error handling and Printing buffer and page content</h3>
+
+The initial <tt>assign2</tt> folder contains code implementing several helper functions.
+
+<h4><tt>buffer_mgr_stat.h</tt> and <tt>buffer_mgr_stat.c</tt></h4>
+
+<p><tt>buffer_mgr_stat.h</tt> provides several functions for outputting buffer or page content to <tt>stdout</tt> or into a string. The implementation of these functions is provided so you do not have to implement them yourself. <tt>printPageContent</tt> prints the byte content of a memory page. <tt>printPoolContent</tt> prints a summary of the current content of a buffer pool. The format looks like that:
+
+<pre>
+{FIFO 3}: [0 0],[3x5],[2 1]
+</pre>
+
+<p><tt>FIFO</tt> is the page replacement strategy. The number following the strategy is the size of the buffer pool (number of page frames). Each part enclosed in <tt>[]</tt> represents one buffer frame. The first number is the page number for the page that is currently stored in this buffer frame. The "x" indicates that the page is <em>dirty</em>, i.e., it has to be written back to disk before it can be replaced with another page. The last number is the <em>fix count</em>. For example, in the buffer shown above the first frame stores the disk page 0 with a fix count of 0. The second page frame stores the disk page 3 with a fix count of 5 and this page is dirty.</p>
+
+<h4><tt>dberror.h</tt> and <tt>dberror.c</tt></h4>
+
+<p>The <tt>dberror.h</tt> header defines error codes and provides a function to print an error message to <tt>stdout</tt>.</p>
+
+<!-- ************************************************************ -->
+<h3>Source Code Structure</h3>
+
+You source code directories should be structured as follows. You should reuse your existing storage manager implementation. So before you start to develop, please copy your storage manager implementation from <tt>assign1</tt> to <tt>assign2</tt>.
+
+<ul>
+	<li>Put all source files in a folder <tt>assign2</tt> in your git repository</li>
+	<li>This folder should contain at least ...</li>
+	<ul>
+		<li>the provided header and C files</li>
+		<li>a make file for building your code <tt>Makefile</tt></li>
+		<li>a bunch of <tt>*.c</tt> and <tt>*.h</tt> files implementing the buffer manager</li>
+		<li><tt>README.txt</tt>: A text file that shortly describes your solution</li>
+	</ul>
+</ul>
+
+E.g., the structure may look like that:
+
+<pre><code>git
+	assign2
+		Makefile
+		buffer_mgr.h
+		buffer_mgr_stat.c
+		buffer_mgr_stat.h
+		dberror.c
+		dberror.h
+		dt.h
+		storage_mgr.h
+		test_assign2_1.c
+		test_assign2_2.c
+		test_helper.h
+</code></pre>
+
+<!-- ************************************************************ -->
+<h3>Test Cases</h3>
+
+<h4><tt>test_assign2_1.c</tt></h4>
+
+<p>This file implements several test cases using the <tt>buffer_mgr.h</tt> interface using the FIFO strategy. Please let your make file generate a <tt>test_assign2_1</tt> binary for this code. You are encouraged to extend it with new test cases or use it as a template to develop your own test files.</p>
+
+<h4><tt>test_assign2_2.c</tt></h4>
+
+<p>This file implements several test cases using the <tt>buffer_mgr.h</tt> interface. Please let your make file generate a <tt>test_assign2_2</tt> binary for this code. This test also tests the LRU strategy. You are encouraged to extend it with new test cases or use it as a template to develop your own test files.</p>
+
+
+ <script>
+
+var pres = document.getElementsByClassName('blockcode'), pre, code, lines, pl, cl;
+
+for (pl = pres.length, p = 0; p < pl; p++) {
+
+pre = pres[p];
+
+code = pre.children[0];
+
+code.innerHTML = code.innerHTML.split("\n").map(function(line) {
+
+return '<span class="line">' + line + '</span>';
+
+}).join("\n");
+
+lines = code.getElementsByClassName('line');
+
+for (cl = lines.length, l = 0; l < cl; l++) {
+
+lines[l].style.width = pre.scrollWidth + 'px';
+
+}
+
+}
+
+</script>
+  </div>
+<!-- ************************************************************ -->
+<!-- ************* Footer ************************************** -->
+<!-- ************************************************************ -->  
+  <div id="footer">
+   <p>
+     <a href="mailto:bglavic@iit.edu">bglavic@iit.edu</a>.<br>
+   </p> 
+  </div>
+  <script type="text/javascript">
+  var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+  document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+  </script><script src="syllabus_files/ga.js" type="text/javascript"></script>
+  <script type="text/javascript">
+  try {
+  var pageTracker = _gat._getTracker("UA-7056528-7");
+  pageTracker._trackPageview();
+  } catch(err) {}</script>
+
+
+</body></html>

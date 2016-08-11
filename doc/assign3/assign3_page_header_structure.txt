@@ -1,0 +1,75 @@
+TABLE INFO (page 0): RECORD_LENGTH + TOTAL_RECORDS + TOTAL_PAGES + PAGE_MAX_RECORDS + SCHEMA_STR
+	RECORD_LENGTH: int
+	TOTAL_RECORDS: int
+	TOTAL_PAGES: int
+	PAGE_MAX_RECORDS: int
+	SCHEMA_STR: char * (seperated by '|')
+		numAttr: int
+		attrNames: char ** (seperated by ',')
+		dataTypes: DataType * (seperated by ',')
+		typeLength: int * (seperated by ',')
+		keyAttrs: int * (seperated by ',')
+		keySize: int
+
+FUNCTIONS:
+	getRecordLength()
+	getTotalRecords()
+	getTotalPages()
+	getPageMaxRecords()
+	getNumAttr()
+	getattrName()
+	getdataType()
+	gettypeLength()
+	getkeyAttr()
+	getkeySize()
+
+	setTotalRecords()
+	setTotalPages()
+
+-------------------------------------------------------------------------------------------------------------------
+RESERVED PAGE (page 1 ...):
+	96 bytes reserved: FIRST_FREE_PAGE_NUM + PREVIOUS_RESERVED_PAGE_NUM + NEXT_RESERVED_PAGE_NUM + ###...
+	FIRST_FREE_PAGE_NUM: int
+	PREVIOUS_RESERVED_PAGE_NUM: int
+	NEXT_RESERVED_PAGE_NUM: int
+
+FUNCTIONS:
+	getFirstFreePage()
+	getPrevReservedPage()
+	getNextReservedPage()
+
+	setFirstFreePage()
+	setPrevReservedPage()
+	setNextReservedPage()
+
+-------------------------------------------------------------------------------------------------------------------
+RECORD PAGE (page 2 ...): IS_INITIALIZED + CURRENT_RECORDS + SLOT_ID + IS_SLOT_OCCUPIED + ... + FIRST_FREE_SPACE
+	IS_PAGE_INITIALIZED: char
+	CURRENT_RECORDS: int
+	SLOT_ID: int
+	IS_SLOT_OCCUPIED: char
+	...
+	FIRST_FREE_SPACE: int
+
+FUNCTIONS:
+	isPageInitialized()
+	getCurrentRecords()
+	getSlotId()
+	isSlotOccupied()
+	getFirstFreeSpace()
+	
+	setPageInitialized()
+	setCurrentRecords()
+	setSlotOccupied()
+	setFirstFreeSpace()
+
+-------------------------------------------------------------------------------------------------------------------
+CODE SAMPLE:
+To store RECORD_LENGTH(50), TOTAL_RECORDS(0), TOTAL_PAGES(1) and PAGE_MAX_RECORDS(200) in page 0:
+
+// get the entry of the data (char *data) first
+int *t = (int *)data;
+t[0] = 50;	// RECORD_LENGTH
+t[1] = 0;	// TOTAL_RECORDS
+t[2] = 1;	// TOTAL_PAGES
+t[3] = 200;	// PAGE_MAX_RECORDS

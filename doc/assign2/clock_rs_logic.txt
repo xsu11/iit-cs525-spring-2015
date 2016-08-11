@@ -1,0 +1,34 @@
+Search first.
+if (find) {
+	load page;
+	return;
+} 
+
+Then:
+1. Initialization: double circulate linkedlist
+	no pages loaded
+	current = head
+	for all PageFrame: clockFlag = FALSE
+
+2. Maintenance:
+if (PageFrame is not full) {
+	read page from disk;
+	set clockFlag to FALSE;
+	current = current->next;
+	return;
+}
+
+// PageFrame is not empty
+while (current->clockFlag != FALSE) {
+	current->clockFlag = FLASE;
+	current = current->next;
+}
+
+3. Termination:
+// find the first page that has clockFlag FALSE
+set clockFlag to TRUE;
+write or not;
+read page from disk;
+load page;
+return;
+

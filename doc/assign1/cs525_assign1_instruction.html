@@ -1,0 +1,264 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xml:lang="en" xmlns="http://www.w3.org/1999/xhtml" lang="en-us"><head>
+   <meta content="text/html; charset=UTF-8" http-equiv="content-type">
+   <title>CS 525 - assign1</title>
+   <meta name="author" content="Boris Glavic">
+
+   <link href="files/site.css" rel="stylesheet" media="screen, projection" type="text/css">
+<link rel="stylesheet" href="http://yandex.st/highlightjs/7.3/styles/default.min.css">
+<script src="http://yandex.st/highlightjs/7.3/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+
+<!-- ************************************************************ -->
+<!-- ************* Menu ***************************************** -->
+<!-- ************************************************************ -->
+</head>
+<body id="home">
+  <div class="header">
+    <h1><strong>CS 525</strong>: Advanced Database Organization - <it>Spring 2014</it></h1>
+    <div class="iitlink">
+      <a href="http://www.iit.edu/csl" target="_blank">
+      <img src="./files/iit_logo_white.png" border="0" style="border:none;max-width:100%"  height="60px" alt="IIT logo" />
+      </a>
+    </div>
+    <div class="unilinks">
+      <ul>
+	<li>
+	<a href="http://www.iit.edu/csl/cs" target="_blank"><img src="./files/CS_600w.jpg" border="0" style="border:none;max-width:100%" height="60px" alt="CS logo" /></a>
+	</li>
+	<li>
+	<a href="http://www.iit.edu/csl" target="_blank"><img src="./files/CSL_logo_white.png" border="0" style="border:none;max-width:100%"  height="60px" alt="CSL logo" /></a>
+	</li>
+      </ul>
+    </div>
+    <ol id="navbar">
+      <li id="nav_home"><a href="http://cs.iit.edu/%7ecs525/index.html">Home</a></li>
+      <li id="nav_lectures"><a href="http://cs.iit.edu/%7ecs525/info.html">Course Info</a></li>
+      <li id="nav_schedule"><a href="http://cs.iit.edu/%7ecs525/schedule.html">Schedule</a></li>
+      <li id="nav_assignments"><a href="http://cs.iit.edu/%7ecs525/assignments.html">Programming Assignments</a></li>
+      <li id="nav_quiz"><a href="http://cs.iit.edu/%7ecs525/quiz.html">Quizzes</a></li>
+      <li id="nav_final"><a href="http://cs.iit.edu/%7ecs525/final.html">Exams</a></li>
+      <li id="nav_resources"><a href="http://cs.iit.edu/%7ecs525/resources.html">Resources</a></li>
+    </ol>
+  </div>
+
+  <!-- ************************************************************ -->  
+<!-- ************* Content ************************************** -->
+<!-- ************************************************************ -->  
+  <div id="content">
+<h2>Assignment 1 - Storage Manager</h2>
+
+<p>The goal of this assignment is to implement a simple storage manager - a module that is capable of reading blocks from a file on disk into memory and writing blocks from memory to a file on disk. The storage manager deals with pages (blocks) of fixed size (<tt>PAGE_SIZE</tt>). In addition to reading and writing pages from a file, it provides methods for creating, opening, and closing files. The storage manager has to maintain several types of information for an open file: The number of total pages in the file, the current page position (for reading and writing), the file name, and a POSIX file descriptor or <tt>FILE</tt> pointer. In your implementation you should implement the interface described below. <strong>Please commit a text file <tt>README.txt</tt> that (shortly) describes the ideas behind your solution and the code structure</strong>. <strong>Comment your code!</tt></strong>
+</p>
+
+<h3>Interface</h3>
+
+<p>The interface your storage manager should implement is given as a header file <tt>storage_mgr.h</tt>. The content of this header is shown below. Two additional headers <tt>dberror.h</tt> and <tt>test_helpers.h</tt> define error codes and constants and macros used in the test cases.</p> 
+
+<pre class="blockcode"><code class="c++">#ifndef STORAGE_MGR_H
+#define STORAGE_MGR_H
+
+#include "dberror.h"
+
+/************************************************************
+ *                    handle data structures                *
+ ************************************************************/
+typedef struct SM_FileHandle {
+  char *fileName;
+  int totalNumPages;
+  int curPagePos;
+  void *mgmtInfo;
+} SM_FileHandle;
+
+typedef char* SM_PageHandle;
+
+/************************************************************
+ *                    interface                             *
+ ************************************************************/
+/* manipulating page files */
+extern void initStorageManager (void);
+extern RC createPageFile (char *fileName);
+extern RC openPageFile (char *fileName, SM_FileHandle *fHandle);
+extern RC closePageFile (SM_FileHandle *fHandle);
+extern RC destroyPageFile (char *fileName);
+
+/* reading blocks from disc */
+extern RC readBlock (int pageNum, SM_FileHandle *fHandle, SM_PageHandle memPage);
+extern int getBlockPos (SM_FileHandle *fHandle);
+extern RC readFirstBlock (SM_FileHandle *fHandle, SM_PageHandle memPage);
+extern RC readPreviousBlock (SM_FileHandle *fHandle, SM_PageHandle memPage);
+extern RC readCurrentBlock (SM_FileHandle *fHandle, SM_PageHandle memPage);
+extern RC readNextBlock (SM_FileHandle *fHandle, SM_PageHandle memPage);
+extern RC readLastBlock (SM_FileHandle *fHandle, SM_PageHandle memPage);
+
+/* writing blocks to a page file */
+extern RC writeBlock (int pageNum, SM_FileHandle *fHandle, SM_PageHandle memPage);
+extern RC writeCurrentBlock (SM_FileHandle *fHandle, SM_PageHandle memPage);
+extern RC appendEmptyBlock (SM_FileHandle *fHandle);
+extern RC ensureCapacity (int numberOfPages, SM_FileHandle *fHandle);
+
+#endif</code></pre>
+
+<h4>Data structures</h3>
+
+<p>The page size is hard-coded in the header file <tt>dberror.h</tt> (<tt>PAGE_SIZE</tt>). Each of the methods defined in the storage manager interface returns an integer return code also defined in <tt>dberror.h</tt> (<tt>RC</tt>). For details see <a href="#returncodes">return codes</a> below.</p>
+
+<p>The methods in the interface use the following two data structures to store information about files and pages:</p>
+
+<h5>File Handle <tt>SM_FileHandle</tt></h5>
+
+<p>A file handle <tt>SM_FileHandle</tt> represents an open page file. Besides the file name, the handle store the total number of pages in the file and the current page position. The current page position is used by some of the read and write methods of the storage manager. For example, readCurrentBlock reads the <tt>curPagePos</tt>th page counted from the beginning of the file. When opening a file, the current page should be the first page in the file (<tt>curPagePos=0</tt>) and the totalNumPages has to be initialized based on the file size. Use the <tt>mgmtInfo</tt> to store additional information about the file needed by your implementation, e.g., a POSIX file descriptor.
+</p>
+
+<p><strong>Hint:</strong> You should reserve some space in the beginning of a file to store information such as the total number of pages.</p>
+<p><strong>Hint:</strong> Use <tt>mgmtInfo</tt> to store any bookkeeping info about a file your storage manager needs.</p>
+
+<pre><code>typedef struct SM_FileHandle {
+  char *fileName;
+  int totalNumPages;
+  int curPagePos;
+  void *mgmtInfo;
+} SM_FileHandle;</code></pre>
+
+
+<h5>Page Handle <tt>SM_PageHandle</tt></h5>
+
+<p>
+A page handle is an pointer to an area in memory storing the data of a page. Methods that write the data pointed to by a page handle to disk or read a page from disk into the area of memory pointed to by the page handle require that the handle is pointing to an previously allocated block of memory that is at least <tt>PAGE_SIZE</tt> number of bytes long. 
+</p>
+
+<pre><code>typedef char* SM_PageHandle;</code></pre>
+
+<h4 id="filemethods">File Related Methods</h4>
+
+<h5>createPageFile</h5>
+
+<p>Create a new page file <tt>fileName</tt>. The initial file size should be one page. This method should fill this single page with '\0' bytes.</p>
+
+<h5>openPageFile</h5>
+
+<p>Opens an existing page file. Should return <tt>RC_FILE_NOT_FOUND</tt> if the file does not exist. The second parameter is an existing file handle. If opening the file is successful, then the fields of this file handle should be initialized with the information about the opened file. For instance, you would have to read the total number of pages that are stored in the file from disk.</p>
+
+<h5>closePageFile, destroyPageFile</h5>
+
+<p>Close an open page file or destroy (delete) a page file.</p>
+
+<h4 id="readandwrite">Read and Write Methods</h4>
+
+<p>There are two types of read and write methods that have to be implemented: Methods with absolute addressing (e.g., <tt>readBlock</tt>) and methods that address relative to the current page of a file (e.g., <tt>readNextBlock</tt>).
+
+<h5>readBlock</h5>
+
+<p>The method reads the <tt>pageNum</tt>th block from a file and stores its content in the memory pointed to by the <tt>memPage</tt> page handle. If the file has less than <tt>pageNum</tt> pages, the method should return <tt>RC_READ_NON_EXISTING_PAGE</tt>.</p>
+
+<h5>getBlockPos</h5>
+
+<p>Return the current page position in a file</pp>
+
+<h5>readFirstBlock, readLastBlock</h5>
+
+<p>Read the first respective last page in a file</p>
+
+<h5>readPreviousBlock, readCurrentBlock, readNextBlock</h5>
+
+<p>Read the current, previous, or next page relative to the <tt>curPagePos</tt> of the file. The <tt>curPagePos</tt> should be moved to the page that was read. If the user tries to read a block before the first page of after the last page of the file, the method should return <tt>RC_READ_NON_EXISTING_PAGE</tt>.</p>
+
+<h5>writeBlock, writeCurrentBlock</h5>
+
+<p>Write a page to disk using either the current position or an absolute position.</p>
+
+<h5>appendEmptyBlock</h5>
+
+<p>Increase the number of pages in the file by one. The new last page should be filled with zero bytes.</p>
+
+<h5>ensureCapacity</h5>
+
+<p>If the file has less than <tt>numberOfPages</tt> pages then increase the size to <tt>numberOfPages</tt>.</p>
+
+<h4 id="returncodes">Return codes</h4>
+
+<p>The header file <tt>dberror.h</tt> defines several error codes as macros. As you may have noticed the storage manager functions all return an <tt>RC</tt> value. This value should indicate whether an operation was successful and if not what type of error occurred. If a method call is successful, the function should return <tt>RC_OK</tt>. The <tt>printError</tt> function can be used to output an error message based on a return code and the message stored in global variable <tt>RC_message</tt> (implemented in <tt>dberror.c</tt>).
+</p>
+
+<h3>Source Code Structure</h3>
+
+You source code directories should be structured as follows.
+
+<ul>
+	<li>Put all source files in a folder <tt>assign1</tt> in your git repository</li>
+	<li>This folder should contain at least ...</li>
+	<ul>
+		<li>the provided header and C files</li>
+		<li>a make file for building your code <tt>Makefile</tt>. This makefile should create a binary from <tt>test_assign1</tt> from <tt>test_assign1_1.c</tt> which requires <tt>dberror.c</tt> and all your C files implementing the <tt>storage_mgr.h</tt> interface</li>
+		<li>a bunch of <tt>*.c</tt> and <tt>*.h</tt> files implementing the storage manager</li>
+		<li><tt>README.txt</tt>: A text file that shortly describes your solution</li>
+	</ul>
+</ul>
+
+E.g., the structure may look like that:
+
+<pre><code>git
+	assign1
+		README.txt
+                dberror.c
+                dberror.h
+                storage_mgr.c
+                storage_mgr.h
+                test_assign1_1.c
+                test_helper.h
+		Makefile
+</code></pre>
+
+<h3>Test cases</h3>
+
+We have provided a few test case in <tt>test_assign1_1.c</tt>. You makefile should create an executable <tt>test_assign1</tt> from this C file. You are encouraged to write additional tests. Make use of existing debugging and memory checking tools. However, usually at some point you will have to debug an error. See the main <a href="http://cs.iit.edu/%7ecs525/assignments.html">assignment page</a> for information about debugging.
+
+
+ <script>
+
+var pres = document.getElementsByClassName('blockcode'), pre, code, lines, pl, cl;
+
+for (pl = pres.length, p = 0; p < pl; p++) {
+
+pre = pres[p];
+
+code = pre.children[0];
+
+code.innerHTML = code.innerHTML.split("\n").map(function(line) {
+
+return '<span class="line">' + line + '</span>';
+
+}).join("\n");
+
+lines = code.getElementsByClassName('line');
+
+for (cl = lines.length, l = 0; l < cl; l++) {
+
+lines[l].style.width = pre.scrollWidth + 'px';
+
+}
+
+}
+
+</script>
+  </div>
+<!-- ************************************************************ -->
+<!-- ************* Footer ************************************** -->
+<!-- ************************************************************ -->  
+  <div id="footer">
+   <p>
+     <a href="mailto:bglavic@iit.edu">bglavic@iit.edu</a>.<br>
+   </p> 
+  </div>
+  <script type="text/javascript">
+  var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+  document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+  </script><script src="syllabus_files/ga.js" type="text/javascript"></script>
+  <script type="text/javascript">
+  try {
+  var pageTracker = _gat._getTracker("UA-7056528-7");
+  pageTracker._trackPageview();
+  } catch(err) {}</script>
+
+
+</body></html>
