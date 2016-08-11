@@ -1,7 +1,7 @@
 # iit_cs525_spring_2015
 WARNING: You can view this code as reference, but DO NOT plagiarize by copying any code from this repository. You will get caught. And I really don't think you can understand my code easily.
 
-This is the code base of IIT CS525 Advanced Database Organization in Spring 2015. This project is to accomplish assignments of this course. All rights reserved.
+This is the repository of IIT CS525 Advanced Database Organization in Spring 2015. This project is to accomplish assignments of this course. All rights reserved.
 
 Created by:
 	Xin Su <xsu11@hawk.iit.edu>
